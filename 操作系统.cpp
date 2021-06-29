@@ -27,7 +27,7 @@ void apply(PCB* p)
 							s.pageAddress[j].inMemory = true;
 							s.pageAddress[j].modify = false;
 							s.pageAddress[j].recently = 0;
-							s.pageAddress[j].blockID = -1;
+							s.pageAddress[j].DiskID = -1;
 							MemmoryBlock[k] = 1;
 							remainBlock--;//可用内存块-1
 							break;
@@ -47,7 +47,7 @@ void apply(PCB* p)
 							s.pageAddress[j].inMemory = false;
 							s.pageAddress[j].modify = false;
 							s.pageAddress[j].recently = 0;
-							s.pageAddress[j].blockID = k;
+							s.pageAddress[j].DiskID = k;
 							DiskBlock[k] = 1;
 							break;
 						}
@@ -72,7 +72,7 @@ void apply(PCB* p)
 						s.pageAddress[j].inMemory = false;
 						s.pageAddress[j].modify = false;
 						s.pageAddress[j].recently = 0;
-						s.pageAddress[j].blockID = k;
+						s.pageAddress[j].DiskID = k;
 						DiskBlock[k] = 1;
 						break;
 					}
