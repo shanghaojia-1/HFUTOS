@@ -3,6 +3,34 @@
 #include "string.h"
 #include<iostream>
 using namespace std;
+PageRecord* LRU(SegmentRecord*& s)
+{
+	int max = -1;
+	SegmentRecord* index = NULL;
+	for (int i = 0; i < totalProcessCnt; i++)
+	{
+		for (int j = 0; j < Processes[i]->segment->size; j++)
+		{
+			if (nowTime - Processes[i]->segment->table[j].recently > max)
+			{
+				max = nowTime - Processes[i]->segment->table[j].recently;
+				index = &Processes[i]->segment->table[j];
+			}
+		}
+	}
+	max = 0;
+	PageRecord* res = NULL;
+	for (int i = 0; i < index->pageCnt; i++)
+	{
+		if (nowTime - index->pageAddress[i].recently > max)
+		{
+			max = nowTime - index->pageAddress[i].recently;
+			res = &index->pageAddress[i];
+		}
+	}
+	s = index;
+	return res;
+}
 void apply(PCB* p)
 {
 	for (int i = 0; i < p->segment->size; i++)
@@ -20,7 +48,7 @@ void apply(PCB* p)
 				{
 					for (int k = 0; k < BLOCKCNT; k++)
 					{
-						if (MemmoryBlock[k] == 0)
+						if (MemoryBlock[k] == 0)
 						{
 							//如果该内存块空闲则立刻分配给程序
 							s->pageAddress[j].id = j;
@@ -29,7 +57,7 @@ void apply(PCB* p)
 							s->pageAddress[j].modify = false;
 							s->pageAddress[j].recently = 0;
 							s->pageAddress[j].DiskID = -1;
-							MemmoryBlock[k] = 1;
+							MemoryBlock[k] = 1;
 							remainBlock--;//可用内存块-1
 							break;
 						}
@@ -50,6 +78,7 @@ void apply(PCB* p)
 							s->pageAddress[j].recently = 0;
 							s->pageAddress[j].DiskID = k;
 							DiskBlock[k] = 1;
+							remaindDisk--;
 							break;
 						}
 					}
@@ -75,6 +104,7 @@ void apply(PCB* p)
 						s->pageAddress[j].recently = 0;
 						s->pageAddress[j].DiskID = k;
 						DiskBlock[k] = 1;
+						remaindDisk--;
 						break;
 					}
 				}
@@ -83,11 +113,6 @@ void apply(PCB* p)
 
 	}
 	cout << "申请完毕" << endl;
-}
-
-void segmentGrowUP(PCB* process,int segmentID,int newsize)
-{
-
 }
 
 void destory(PCB* p)
@@ -100,7 +125,7 @@ void destory(PCB* p)
 		{
 			if (pages[j].inMemory)
 			{
-				MemmoryBlock[pages[j].blockID] = 0;
+				MemoryBlock[pages[j].blockID] = 0;
 			}
 			else
 			{
@@ -113,74 +138,110 @@ void destory(PCB* p)
 	cout << "销毁完成" << endl;
 }
 
-void Lack_Seg_Interrupt(PCB* pcb) {
+void Lack_Seg_Interrupt(SegmentRecord* s, PageRecord* pr)
+{
+	cout << "触发了缺段" << endl;
 	if (remainBlock > 0) {
+		//如果存在空闲块
+		for (int i = 0; i < BLOCKCNT; i++)
+		{
+			if (MemoryBlock[i] == 0)
+			{
+				//如果该内存块没有被使用，则使用他
+				s->inMemory = true;
+				pr->blockID = i;
+				pr->inMemory = true;
+				pr->modify = false;
+				remainBlock--;
+			}
+		}
+	}
 
-
+	else {
+		SegmentRecord* replaceSeg;//报存被替换出来的页面所属于的段，用于后面判断这个段的页面被替换出去后此段是否还存在页面在内存中
+		PageRecord* replacePage = LRU(replaceSeg);//通过LRU算法找出在要替换的页
+		s->inMemory = true;
+		replacePage->inMemory = false;
+		if (replacePage->modify == true)
+		{
+			//如果该内存块被修改,则需要重新写回磁盘
+			replacePage->modify = false;
+			//copy data
+		}
+		//否则直接丢弃该页面即可
+		DiskBlock[replacePage->DiskID] = 1;
+		pr->blockID = replacePage->blockID;
+		pr->inMemory = true;
+		bool inMemory = false;
+		for (int i = 0; i < s->pageCnt; i++)
+		{
+			if (replaceSeg->pageAddress[i].inMemory == true)
+			{
+				inMemory = true;
+				break;
+			}
+		}
+		if (inMemory == false)
+		{
+			replaceSeg->inMemory = false;//如果该段没有页面在内存中，则修改该段不在内存中
+		}
 	}
 }
 
 //缺页中断处理
 void Lack_Page_Interrupt(SegmentRecord* s, PageRecord* pr) {
+	cout << "触发了缺页" << endl;
 	//如果有空闲块
 	if (remainBlock > 0) {
 
 		//遍历内存块
 		for (int i = 0; i < BLOCKCNT; i++) {
-			if (MemmoryBlock[i] == 0) {//找到空闲内存块
-				MemmoryBlock[i] = 1;
+			if (MemoryBlock[i] == 0) {//找到空闲内存块
+				MemoryBlock[i] = 1;
 				pr->inMemory = true;
 				pr->modify = false;
 				pr->blockID = i;
-				pr->recently = 0;
+				remainBlock--;
 				return;
 			}
 		}
 	}
 	else {//如果没有空闲块
-		int replaceIndex = LRU(s);//获取将要替换的页号
-		if (s->pageAddress[replaceIndex].modify)
+		SegmentRecord* replaceSeg;//报存被替换出来的页面所属于的段，用于后面判断这个段的页面被替换出去后此段是否还存在页面在内存中
+		PageRecord* replacePage = LRU(replaceSeg);//通过LRU算法找出在要替换的页
+		replacePage->inMemory = false;
+		if (replacePage->modify == true)
 		{
-			//如果该页被修改过
-			s->pageAddress[replaceIndex].modify = false;
-			s->pageAddress[replaceIndex].inMemory = false;
-			s->pageAddress[replaceIndex].recently = 0;
-			int blockID = s->pageAddress[replaceIndex].blockID;
-			pr->blockID = blockID;
-			pr->inMemory = true;
-			pr->recently = 0;
+			//如果该内存块被修改,则需要重新写回磁盘
+			replacePage->modify=false;		
+			//copy data
 		}
-		else {
-			s->pageAddress[replaceIndex].inMemory = false;
-			s->pageAddress[replaceIndex].recently = 0;
-			int blockID = s->pageAddress[replaceIndex].blockID;
-			pr->blockID = blockID;
-			pr->inMemory = true;
-			pr->recently = 0;
+		//否则直接丢弃该页面即可
+		DiskBlock[replacePage->DiskID] = 1;
+		pr->blockID = replacePage->blockID;
+		pr->inMemory = true;
+		bool inMemory = false;
+		for (int i = 0; i < s->pageCnt; i++)
+		{
+			if (s->pageAddress[i].inMemory == true)
+			{
+				inMemory = true;
+				break;
+			}
+		}
+		if (inMemory == false)
+		{
+			s->inMemory = false;//如果该段没有页面在内存中，则修改该段不在内存中
 		}
 	}
 
 }
 
-int LRU(SegmentRecord* s) {
 
-	//遍历该段
-	int index = 0;
-	int max =s->recently- s->pageAddress[0].recently;
-	for (int i = 1; i < s->pageCnt; i++) {
-		if (s->recently-s->pageAddress[i].recently > max)
-		{
-			index = i;
-			max = s->recently-s->pageAddress[i].recently;
-		}
-	}
-	return index;
-
-
-}
 
 //逻辑地址转换成物理地址,return:0 转换正常; 1 段越界 ; 2 页越界
 int addressConvert(PCB* process, int segId, int pageId, int offset, int& paddr) {/*进程，虚拟地址(段号，页号，偏移)，物理地址*/
+	nowTime++;
 	SegmentTable* segTable = process->segment;   //获取段表
 	//根据段表找到相应的页框
 	if (segId < 0 || segId >= segTable->size) {//判断段号是否越界
@@ -191,36 +252,81 @@ int addressConvert(PCB* process, int segId, int pageId, int offset, int& paddr) 
 		if (pageId < 0 || pageId >= segment->pageCnt) {//判断页号是否越界
 			return 2;
 		}
-
+		if (segment->inMemory == false)
+		{
+			//缺段
+			Lack_Seg_Interrupt(segment, &segment->pageAddress[pageId]);
+		}
 		if (segment->pageAddress[pageId].inMemory == false)
 		{
 			//缺页了
 			Lack_Page_Interrupt(segment, &segment->pageAddress[pageId]);
 		}
-		segment->recently++;
-		segment->pageAddress[pageId].recently++;
+		segment->recently= nowTime;
+		segment->pageAddress[pageId].recently= nowTime;
+		
 		PageRecord* pr = &(segment->pageAddress[pageId]);//获取页表项
 		paddr = PAGESIZE * (pr->blockID) + offset;  //根据映射的物理块号和偏移量获取物理地址
 		return 0;
 	}
 }
+
+void shouPCBMemory(PCB* process)
+{
+	cout << "进程信息" << endl;
+	cout << process->name << endl;
+	for (int i = 0; i < process->segment->size; i++)
+	{
+		cout << "段" << i << endl;
+		for (int j = 0; j < process->segment->table[i].pageCnt; j++)
+		{
+			if (process->segment->table[i].pageAddress[j].inMemory==true)
+			{
+				cout << process->segment->table[i].pageAddress[j].blockID << "  ";
+			}
+			else
+			{
+				cout << process->segment->table[i].pageAddress[j].DiskID << "(外存)" << "  ";
+			}
+		}
+		cout << endl;
+	}
+}
 int main()
 {
-	memset(MemmoryBlock, 0, BLOCKCNT);
+	memset(MemoryBlock, 0, BLOCKCNT);
 	memset(DiskBlock, 0, DISKBOCKCNT);
+//	memset(MemoryBlock,1, BLOCKCNT-10);
+	//remainBlock = 10;
 	PCB* process1 = (PCB *)malloc(sizeof(PCB));
-	process1->id = 1;
+	PCB* process2 = (PCB*)malloc(sizeof(PCB));
+	process1->id = 0;
 	strcpy(process1->name, "进程1");
-	SegmentTable segTable;
-	segTable.size = 3;
-	segTable.table = (SegmentRecord*)malloc(sizeof(SegmentRecord) * 3);
-	segTable.table[0].id = 0;
-	segTable.table[0].pageCnt = 20;
-	segTable.table[1].id =1;
-	segTable.table[1].pageCnt =30;
-	segTable.table[2].id = 2;
-	segTable.table[2].pageCnt = 40;
-	process1->segment = &segTable;
+	SegmentTable segTable1;
+	segTable1.size = 1;
+	segTable1.table = (SegmentRecord*)malloc(sizeof(SegmentRecord));
+	segTable1.table[0].id = 0;
+	segTable1.table[0].pageCnt = BLOCKCNT - 10;
+	process1->segment = &segTable1;
+	SegmentTable segTable2;
+	segTable2.size = 2;
+	segTable2.table = (SegmentRecord*)malloc(sizeof(SegmentRecord)*2);
+	segTable2.table[0].id = 0;
+	segTable2.table[0].pageCnt =15;
+	segTable2.table[1].id = 1;
+	segTable2.table[1].pageCnt = 15;
+	process2->id = 1;
+	process2->segment = &segTable2;
+	strcpy(process2->name, "进程2");
+	totalProcessCnt = 2;
 	apply(process1);
+	apply(process2);
+	Processes[0] = process1;
+	Processes[1] = process2;
+	shouPCBMemory(process2);
+	int address;
+	addressConvert(process2, 1, 11, 11, address);
+	shouPCBMemory(process2);
+	cout << address << endl;;
 	destory(process1);
 }

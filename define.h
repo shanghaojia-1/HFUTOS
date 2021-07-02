@@ -1,9 +1,9 @@
 #pragma once
 #include <malloc.h>
 //固定一个页面有4KB
-const int PAGESIZE = 4096;  //页面大小4KB
-const int BLOCKCNT = 1024 * 512;//内存块数
-const int DISKBOCKCNT = 1024 * 512 * 2;//外存块数
+const int PAGESIZE = 4;  //页面大小4KB
+const int BLOCKCNT = 512 * 4;//内存块数
+const int DISKBOCKCNT = 512*2*4;//外存块数
 struct PageRecord
 {
 	int id;//页号
@@ -30,7 +30,7 @@ struct SegmentTable//段表
 	SegmentRecord* table;
 };
 
-char* MemmoryBlock = new char[BLOCKCNT];//模拟内存块，一共有1024*1024个内存块，一个内存块大小为4KB,所以说共有2GB内存
+char* MemoryBlock = new char[BLOCKCNT];//模拟内存块，一共有1024*1024个内存块，一个内存块大小为4KB,所以说共有2GB内存
 char* DiskBlock = new char[DISKBOCKCNT]; //模拟外存块
 int remainBlock=BLOCKCNT;
 int remaindDisk = DISKBOCKCNT;
@@ -41,4 +41,6 @@ struct PCB
 	char name[10];//进程名字
 	SegmentTable* segment;
 };
+PCB* Processes[100];
 int totalProcessCnt = 0;
+int nowTime = 0;
