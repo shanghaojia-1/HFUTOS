@@ -1,6 +1,9 @@
 ﻿#define  _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
 #include "define.h"
 #include "string.h"
+
+
 #include<iostream>
 using namespace std;
 PageRecord* LRU(SegmentRecord*& s)
@@ -153,6 +156,7 @@ void Lack_Seg_Interrupt(SegmentRecord* s, PageRecord* pr)
 				pr->inMemory = true;
 				pr->modify = false;
 				remainBlock--;
+				break;
 			}
 		}
 	}
@@ -215,6 +219,7 @@ void Lack_Page_Interrupt(SegmentRecord* s, PageRecord* pr) {
 			//如果该内存块被修改,则需要重新写回磁盘
 			replacePage->modify=false;		
 			//copy data
+
 		}
 		//否则直接丢弃该页面即可
 		DiskBlock[replacePage->DiskID] = 1;
@@ -292,8 +297,43 @@ void shouPCBMemory(PCB* process)
 		cout << endl;
 	}
 }
+
+
+bool readBlock(int diskID, int blockID)
+{
+	if (fseek(PageFile, diskID * PAGESIZE, 0) == 0)
+	{
+		int size=fread(&Memories[blockID * PAGESIZE], PAGESIZE, 1, PageFile);
+		if (size == 1)
+		{
+			return true;
+		}
+		return false;
+	}
+	return false;
+}
+
+bool saveBlock(int diskID, int blockID)
+{
+	if (fseek(PageFile, diskID * PAGESIZE, 0) == 0)
+	{
+		int size = fwrite(&Memories[blockID * PAGESIZE], PAGESIZE, 1, PageFile);
+		if (size == 1)
+		{
+			return true;
+		}
+		return false;
+	}
+	return false;
+}
+
+
 int main()
 {
+	PageFile = fopen("PageFile","w+");
+	char buffer[DISKBOCKCNT * PAGESIZE] = { 0 };
+	fwrite(buffer, 1, DISKBOCKCNT * PAGESIZE, PageFile);
+	fclose(PageFile);
 	memset(MemoryBlock, 0, BLOCKCNT);
 	memset(DiskBlock, 0, DISKBOCKCNT);
 //	memset(MemoryBlock,1, BLOCKCNT-10);

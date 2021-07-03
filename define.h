@@ -2,7 +2,7 @@
 #include <malloc.h>
 //固定一个页面有4KB
 const int PAGESIZE = 4;  //页面大小4KB
-const int BLOCKCNT = 512 * 4;//内存块数
+const int BLOCKCNT = 512 ;//内存块数
 const int DISKBOCKCNT = 512*2*4;//外存块数
 struct PageRecord
 {
@@ -34,6 +34,8 @@ char* MemoryBlock = new char[BLOCKCNT];//模拟内存块，一共有1024*1024个内存块，一
 char* DiskBlock = new char[DISKBOCKCNT]; //模拟外存块
 int remainBlock=BLOCKCNT;
 int remaindDisk = DISKBOCKCNT;
+char* Memories = new char[BLOCKCNT * PAGESIZE];
+FILE* PageFile;
 struct PCB 
 {
 	int id;//进程id
